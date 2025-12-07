@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: outbox-pattern-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: outbox_db
+      POSTGRES_USER: outbox_user
+      POSTGRES_PASSWORD: outbox_password
+    volumes:
+      - ./pg_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - outbox-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U outbox_user -d outbox_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  outbox-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+
