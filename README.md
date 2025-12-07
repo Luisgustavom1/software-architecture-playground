@@ -1,1 +1,1 @@
-# microservices-study
+# Software Architecture Playground
