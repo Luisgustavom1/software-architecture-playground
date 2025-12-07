@@ -2,3 +2,4 @@ volume
 
 **/node_modules/**
 **/dist/**
+**/pg_data/**
