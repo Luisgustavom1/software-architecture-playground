@@ -20,3 +20,5 @@ WHERE status = 'pending';
 
 CREATE INDEX IF NOT EXISTS idx_outbox_aggregate ON outbox(aggregate_id, created_at);
 
+-- Publication for Debezium CDC
+CREATE PUBLICATION IF NOT EXISTS outbox_pub FOR TABLE outbox;

@@ -5,6 +5,14 @@ services:
     image: postgres:16-alpine
     container_name: outbox-pattern-db
     restart: unless-stopped
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "max_replication_slots=10"
     environment:
       POSTGRES_DB: outbox_db
       POSTGRES_USER: outbox_user
@@ -21,6 +29,75 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  debezium:
+    image: debezium/server:2.5
+    container_name: outbox-pattern-debezium
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DEBEZIUM_SINK_TYPE: http
+      DEBEZIUM_SOURCE_CONNECTOR_CLASS: io.debezium.connector.postgresql.PostgresConnector
+      DEBEZIUM_SOURCE_DATABASE_HOSTNAME: postgres
+      DEBEZIUM_SOURCE_DATABASE_PORT: 5432
+      DEBEZIUM_SOURCE_DATABASE_USER: outbox_user
+      DEBEZIUM_SOURCE_DATABASE_PASSWORD: outbox_password
+      DEBEZIUM_SOURCE_DATABASE_DBNAME: outbox_db
+      DEBEZIUM_SOURCE_TOPIC_PREFIX: outbox
+      DEBEZIUM_SOURCE_PLUGIN_NAME: pgoutput
+      DEBEZIUM_SOURCE_PUBLICATION_NAME: outbox_pub
+      DEBEZIUM_SOURCE_SLOT_NAME: outbox_slot
+      DEBEZIUM_SOURCE_TABLE_INCLUDE_LIST: public.outbox
+      DEBEZIUM_SINK_HTTP_URL: http://relay:8081/debezium
+      DEBEZIUM_SINK_HTTP_METHOD: POST
+      DEBEZIUM_SINK_HTTP_HEADERS: Content-Type:application/json
+    ports:
+      - "8083:8083"
+    networks:
+      - outbox-network
+
+  relay:
+    build:
+      context: .
+      dockerfile: ./cmd/relay/Dockerfile
+    container_name: outbox-pattern-relay
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: outbox_user
+      DB_PASSWORD: outbox_password
+      DB_NAME: outbox_db
+      WEBHOOK_URL: http://webhook-consumer:8082/orders/finish
+    ports:
+      - "8081:8081"
+    networks:
+      - outbox-network
+
+  webhook-consumer:
+    build:
+      context: .
+      dockerfile: ./cmd/webhook-consumer/Dockerfile
+    container_name: outbox-pattern-webhook-consumer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: outbox_user
+      DB_PASSWORD: outbox_password
+      DB_NAME: outbox_db
+    ports:
+      - "8082:8082"
+    networks:
+      - outbox-network
 
 networks:
   outbox-network:
