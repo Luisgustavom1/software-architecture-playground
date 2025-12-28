@@ -5,26 +5,22 @@ import (
 	"fmt"
 	"os"
 
-	_ "github.com/lib/pq"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 var DB *sql.DB
 
 func Init() error {
 	host := getEnv("DB_HOST", "localhost")
-	port := getEnv("DB_PORT", "5432")
+	port := getEnv("DB_PORT", "3306")
 	user := getEnv("DB_USER", "outbox_user")
 	password := getEnv("DB_PASSWORD", "outbox_password")
 	dbname := getEnv("DB_NAME", "outbox_db")
-	sslmode := getEnv("DB_SSLMODE", "disable")
 
-	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		host, port, user, password, dbname, sslmode,
-	)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", user, password, host, port, dbname)
 
 	var err error
-	DB, err = sql.Open("postgres", dsn)
+	DB, err = sql.Open("mysql", dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}

@@ -39,7 +39,12 @@ func createOrderHandler(db *sql.DB) func(c *gin.Context) {
 			return
 		}
 
-		err = tx.QueryRow("INSERT INTO orders (total_amount, status) VALUES ($1, $2) RETURNING id", order.TotalAmount, order.Status).Scan(&order.ID)
+		result, err := tx.Exec("INSERT INTO orders (total_amount, status) VALUES (?, ?)", order.TotalAmount, order.Status)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		order.ID, err = result.LastInsertId()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -51,7 +56,7 @@ func createOrderHandler(db *sql.DB) func(c *gin.Context) {
 			return
 		}
 
-		_, err = tx.Exec("INSERT INTO outbox (aggregate_id, payload, status) VALUES ($1, $2, $3)", order.ID, payload, "pending")
+		_, err = tx.Exec("INSERT INTO outbox (aggregate_id, payload, status) VALUES (?, ?, ?)", order.ID, payload, "pending")
 		if err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

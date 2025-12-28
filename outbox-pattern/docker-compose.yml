@@ -1,23 +1,24 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
+  mysql:
+    image: mysql:8.4
     container_name: outbox-pattern-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: outbox_db
-      POSTGRES_USER: outbox_user
-      POSTGRES_PASSWORD: outbox_password
+      MYSQL_DATABASE: outbox_db
+      MYSQL_USER: outbox_user
+      MYSQL_PASSWORD: outbox_password
+      MYSQL_ROOT_PASSWORD: root_password
     volumes:
-      - ./pg_data:/var/lib/postgresql/data
+      - ./mysql_data:/var/lib/mysql
       - ./migrations:/docker-entrypoint-initdb.d
     ports:
-      - "5432:5432"
+      - "3306:3306"
     networks:
       - outbox-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U outbox_user -d outbox_db"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u outbox_user -poutbox_password"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -27,5 +28,5 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
+  mysql_data:
 

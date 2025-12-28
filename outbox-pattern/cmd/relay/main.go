@@ -57,7 +57,7 @@ func main() {
 			time.Sleep(1 * time.Second)
 
 			published_at := time.Now()
-			_, err = db.DB.ExecContext(ctx, `UPDATE outbox SET status = 'published', published_at = $1 WHERE id = $2`, published_at, outbox.ID)
+			_, err = db.DB.ExecContext(ctx, `UPDATE outbox SET status = 'published', published_at = ? WHERE id = ?`, published_at, outbox.ID)
 			if err != nil {
 				log.Printf("failed to update outbox %d: %v", outbox.ID, err)
 				continue
