@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"time"
 
 	"github.com/software-architecture-playground/outbox-pattern/db"
+
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
 type Outbox struct {
@@ -18,52 +21,62 @@ type Outbox struct {
 }
 
 func main() {
+	c, err := kafka.NewConsumer(&kafka.ConfigMap{
+		"bootstrap.servers": "localhost:9092",
+		"group.id":          "outbox-relay-group",
+		"auto.offset.reset": "earliest",
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	err = c.SubscribeTopics([]string{"cdc.outbox_db.outbox"}, nil)
+
+	if err != nil {
+		panic(err)
+	}
+
 	db.Init()
 	defer db.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
+		c.Close()
 	}()
 
 	for {
 		log.Printf("getting outbox records to process")
-		rows, err := db.DB.QueryContext(ctx, "SELECT * FROM outbox WHERE status = 'pending' ORDER BY created_at ASC")
-		if err != nil {
-			log.Printf("failed to query outbox: %v", err)
-			time.Sleep(1 * time.Second)
+		msg, err := c.ReadMessage(time.Second)
+		if err != nil && !err.(kafka.Error).IsTimeout() {
+			// The client will automatically try to recover from all errors.
+			// Timeout is not considered an error because it is raised by
+			// ReadMessage in absence of messages.
+			log.Printf("Consumer error: %v (%v)\n", err, msg)
 			continue
 		}
 
-		var outboxes []Outbox
-
-		for rows.Next() {
-			var outbox Outbox
-			err = rows.Scan(&outbox.ID, &outbox.AggregateID, &outbox.Payload, &outbox.Status, &outbox.CreatedAt, &outbox.PublishedAt)
-			if err != nil {
-				log.Printf("failed to scan row: %v", err)
-				continue
-			}
-			outboxes = append(outboxes, outbox)
+		if msg == nil {
+			continue
 		}
 
-		rows.Close()
-
-		for i := range outboxes {
-			outbox := outboxes[i]
-
-			// publishing message
-			log.Printf("publishing message for order %#v", outbox)
-			time.Sleep(1 * time.Second)
-
-			published_at := time.Now()
-			_, err = db.DB.ExecContext(ctx, `UPDATE outbox SET status = 'published', published_at = ? WHERE id = ?`, published_at, outbox.ID)
-			if err != nil {
-				log.Printf("failed to update outbox %d: %v", outbox.ID, err)
-				continue
-			}
+		log.Printf("222 %v 111", string(msg.Value))
+		var outbox Outbox
+		err = json.Unmarshal(msg.Value, &outbox)
+		if err != nil {
+			log.Printf("failed to unmarshal outbox message: %v", err)
+			continue
 		}
 
+		log.Printf("publishing message for order %#v", outbox)
 		time.Sleep(1 * time.Second)
+
+		published_at := time.Now()
+		_, err = db.DB.ExecContext(ctx, `UPDATE outbox SET status = 'published', published_at = ? WHERE id = ?`, published_at, outbox.ID)
+		if err != nil {
+			log.Printf("failed to update outbox %d: %v", outbox.ID, err)
+			continue
+		}
 	}
 }
